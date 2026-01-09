@@ -1,0 +1,10 @@
+{
+  "tests": [
+    {
+      "name": "Get forex signals",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -40,11 +40,61 @@ const historySignals: Signal[] = [
 ];
 
 const Index = () => {
+  const [botActive, setBotActive] = useState(false);
+  const [command, setCommand] = useState('');
+  const [signals, setSignals] = useState<Signal[]>(mockSignals);
+  const [history, setHistory] = useState<Signal[]>(historySignals);
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeFrame | 'all'>('all');
   const [selectedVolatility, setSelectedVolatility] = useState<string>('all');
   const [minConfidence, setMinConfidence] = useState<number>(0);
+  const [countdown, setCountdown] = useState(5);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const filteredSignals = mockSignals.filter(signal => {
+  useEffect(() => {
+    if (botActive) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            fetchNewSignals();
+            return 5;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      intervalRef.current = timer;
+      return () => clearInterval(timer);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setCountdown(5);
+    }
+  }, [botActive]);
+
+  const fetchNewSignals = async () => {
+    try {
+      const response = await fetch('https://functions.poehali.dev/25f9b946-47e6-4de9-832e-9a49927bd0b3');
+      const data = await response.json();
+      
+      if (data.signals && data.signals.length > 0) {
+        setSignals(data.signals);
+      }
+    } catch (error) {
+      console.error('Failed to fetch signals:', error);
+    }
+  };
+
+  const handleCommand = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (command.toLowerCase() === '/start') {
+      setBotActive(true);
+      setCommand('');
+      fetchNewSignals();
+    } else if (command.toLowerCase() === '/stop') {
+      setBotActive(false);
+      setCommand('');
+    }
+  };
+
+  const filteredSignals = signals.filter(signal => {
     if (selectedTimeframe !== 'all' && signal.timeframe !== selectedTimeframe) return false;
     if (selectedVolatility !== 'all' && signal.volatility !== selectedVolatility) return false;
     if (signal.confidence < minConfidence) return false;
@@ -60,12 +110,12 @@ const Index = () => {
     }
   };
 
-  const winRate = Math.round((historySignals.filter(s => s.status === 'win').length / historySignals.length) * 100);
+  const winRate = history.length > 0 ? Math.round((history.filter(s => s.status === 'win').length / history.length) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        <header className="flex items-center justify-between">
+        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
               <Icon name="TrendingUp" size={32} className="text-accent" />
@@ -73,13 +123,47 @@ const Index = () => {
             </h1>
             <p className="text-muted-foreground mt-1">Точный анализ торговых сигналов</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            {botActive && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-success/20 border border-success/30 rounded-lg">
+                <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
+                <span className="text-sm text-success font-medium">Обновление через {countdown}с</span>
+              </div>
+            )}
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Win Rate</p>
               <p className="text-2xl font-bold text-success">{winRate}%</p>
             </div>
           </div>
         </header>
+
+        <Card className="p-4 border-border bg-card">
+          <form onSubmit={handleCommand} className="flex gap-3">
+            <div className="flex-1 relative">
+              <Icon name="Terminal" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                placeholder="Введите команду (/start или /stop)"
+                className="w-full pl-10 pr-4 py-2 bg-secondary border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+              />
+            </div>
+            <Button type="submit" className="bg-accent hover:bg-accent/90">
+              <Icon name="Play" size={18} />
+              Выполнить
+            </Button>
+          </form>
+          {!botActive && (
+            <p className="text-sm text-muted-foreground mt-2">💡 Введите <code className="bg-secondary px-2 py-1 rounded">/start</code> для запуска автоматического обновления сигналов</p>
+          )}
+          {botActive && (
+            <p className="text-sm text-success mt-2 flex items-center gap-2">
+              <Icon name="CheckCircle" size={16} />
+              Бот активен. Сигналы обновляются каждые 5 секунд
+            </p>
+          )}
+        </Card>
 
         <Tabs defaultValue="signals" className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-3 mb-6">
@@ -207,7 +291,7 @@ const Index = () => {
 
           <TabsContent value="history" className="space-y-4">
             <div className="space-y-3">
-              {historySignals.map((signal) => (
+              {history.map((signal) => (
                 <Card key={signal.id} className="p-4 border-border bg-card hover:border-accent/50 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
