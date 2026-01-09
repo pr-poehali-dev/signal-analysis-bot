@@ -48,7 +48,10 @@ const Index = () => {
   const [selectedVolatility, setSelectedVolatility] = useState<string>('all');
   const [minConfidence, setMinConfidence] = useState<number>(0);
   const [countdown, setCountdown] = useState(5);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (botActive) {
@@ -80,6 +83,36 @@ const Index = () => {
     } catch (error) {
       console.error('Failed to fetch signals:', error);
     }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Image = event.target?.result as string;
+      setUploadedImage(base64Image);
+      setIsAnalyzing(true);
+
+      try {
+        const response = await fetch('https://functions.poehali.dev/622a11e2-25b0-46b0-ad83-516b393fe08a', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Image.split(',')[1] })
+        });
+
+        const data = await response.json();
+        if (data.signal) {
+          setSignals(prev => [data.signal, ...prev.slice(0, 5)]);
+        }
+      } catch (error) {
+        console.error('Failed to analyze chart:', error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleCommand = (e: React.FormEvent) => {
@@ -137,11 +170,12 @@ const Index = () => {
           </div>
         </header>
 
-        <Card className="p-4 border-border bg-card">
-          <form onSubmit={handleCommand} className="flex gap-3">
-            <div className="flex-1 relative">
-              <Icon name="Terminal" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className="p-4 border-border bg-card">
+            <form onSubmit={handleCommand} className="flex gap-3">
+              <div className="flex-1 relative">
+                <Icon name="Terminal" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
                 type="text"
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
@@ -164,6 +198,48 @@ const Index = () => {
             </p>
           )}
         </Card>
+
+        <Card className="p-4 border-border bg-card">
+          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Icon name="Image" size={20} className="text-accent" />
+            Анализ скриншота графика
+          </h3>
+          <div className="space-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isAnalyzing}
+              className="w-full bg-accent hover:bg-accent/90"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Icon name="Loader2" size={18} className="animate-spin" />
+                  Анализирую график...
+                </>
+              ) : (
+                <>
+                  <Icon name="Upload" size={18} />
+                  Загрузить скриншот
+                </>
+              )}
+            </Button>
+            {uploadedImage && (
+              <div className="relative rounded-lg overflow-hidden border border-border">
+                <img src={uploadedImage} alt="Загруженный график" className="w-full h-auto" />
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              📸 Загрузите скриншот графика валютной пары. ИИ определит валюту, таймфрейм и даст точный сигнал BUY/SELL на следующие 5 секунд
+            </p>
+          </div>
+        </Card>
+        </div>
 
         <Tabs defaultValue="signals" className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-3 mb-6">
