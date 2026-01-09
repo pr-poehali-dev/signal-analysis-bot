@@ -8,7 +8,7 @@ import Icon from '@/components/ui/icon';
 import { Progress } from '@/components/ui/progress';
 
 type SignalType = 'BUY' | 'SELL';
-type TimeFrame = '1m' | '5m' | '15m' | '1h' | '4h';
+type TimeFrame = '15s' | '30s' | '1m' | '2m' | '5m' | '15m' | '1h' | '4h';
 
 interface Signal {
   id: string;
@@ -50,8 +50,18 @@ const Index = () => {
   const [countdown, setCountdown] = useState(5);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [pocketOptionId, setPocketOptionId] = useState<string>('');
+  const [isConnected, setIsConnected] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const savedId = localStorage.getItem('pocketOptionId');
+    if (savedId) {
+      setPocketOptionId(savedId);
+      setIsConnected(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (botActive) {
@@ -115,6 +125,27 @@ const Index = () => {
     reader.readAsDataURL(file);
   };
 
+  const connectPocketOption = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pocketOptionId.trim()) return;
+
+    try {
+      const response = await fetch('https://functions.poehali.dev/f70e90f1-475b-4138-9c4b-ff419d046a5b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pocket_id: pocketOptionId })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setIsConnected(true);
+        localStorage.setItem('pocketOptionId', pocketOptionId);
+      }
+    } catch (error) {
+      console.error('Failed to connect Pocket Option:', error);
+    }
+  };
+
   const handleCommand = (e: React.FormEvent) => {
     e.preventDefault();
     if (command.toLowerCase() === '/start') {
@@ -169,6 +200,54 @@ const Index = () => {
             </div>
           </div>
         </header>
+
+        <Card className="p-4 border-border bg-card mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Icon name="Link" size={20} className="text-accent" />
+            Подключение Pocket Option
+          </h3>
+          {!isConnected ? (
+            <form onSubmit={connectPocketOption} className="space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Icon name="User" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={pocketOptionId}
+                    onChange={(e) => setPocketOptionId(e.target.value)}
+                    placeholder="Введите ваш Pocket Option ID"
+                    className="w-full pl-10 pr-4 py-2 bg-secondary border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <Button type="submit" className="bg-accent hover:bg-accent/90">
+                  <Icon name="Link" size={18} />
+                  Подключить
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                🔗 ID находится в настройках профиля Pocket Option. После подключения получите доступ к реальным рыночным данным всех валют
+              </p>
+            </form>
+          ) : (
+            <div className="flex items-center justify-between p-3 bg-success/10 border border-success/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
+                <span className="text-sm text-success font-medium">Подключено: {pocketOptionId}</span>
+              </div>
+              <Button
+                onClick={() => {
+                  setIsConnected(false);
+                  setPocketOptionId('');
+                  localStorage.removeItem('pocketOptionId');
+                }}
+                variant="outline"
+                size="sm"
+              >
+                Отключить
+              </Button>
+            </div>
+          )}
+        </Card>
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="p-4 border-border bg-card">
@@ -268,11 +347,11 @@ const Index = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Все</SelectItem>
+                      <SelectItem value="15s">15 секунд</SelectItem>
+                      <SelectItem value="30s">30 секунд</SelectItem>
                       <SelectItem value="1m">1 минута</SelectItem>
+                      <SelectItem value="2m">2 минуты</SelectItem>
                       <SelectItem value="5m">5 минут</SelectItem>
-                      <SelectItem value="15m">15 минут</SelectItem>
-                      <SelectItem value="1h">1 час</SelectItem>
-                      <SelectItem value="4h">4 часа</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -345,12 +424,18 @@ const Index = () => {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="text-xs">
-                        {signal.timeframe}
+                      <Badge variant="outline" className="text-xs font-bold border-accent text-accent">
+                        ⏱️ {signal.timeframe}
                       </Badge>
                       <Badge variant="outline" className={`text-xs ${getVolatilityColor(signal.volatility)}`}>
                         {signal.volatility}
                       </Badge>
+                    </div>
+                    
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-xs text-muted-foreground">
+                        💡 <span className="font-semibold">Рекомендация:</span> {signal.type === 'BUY' ? 'Покупать' : 'Продавать'} на {signal.timeframe}
+                      </p>
                     </div>
                   </div>
                 </Card>

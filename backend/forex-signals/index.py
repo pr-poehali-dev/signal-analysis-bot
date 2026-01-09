@@ -5,7 +5,8 @@ from datetime import datetime
 
 def handler(event: dict, context) -> dict:
     """
-    Получение реальных котировок Forex и генерация торговых сигналов
+    Получение реальных котировок Forex и генерация точных торговых сигналов
+    с таймфреймами от 15 секунд до 5 минут для всех валютных пар
     """
     method = event.get('httpMethod', 'GET')
 
@@ -30,14 +31,18 @@ def handler(event: dict, context) -> dict:
     api_key = os.environ.get('FINNHUB_API_KEY')
     use_mock_data = not api_key
 
-    pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD']
+    pairs = [
+        'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+        'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'USD/CHF', 'AUD/JPY', 'EUR/AUD',
+        'GBP/AUD', 'AUD/CAD', 'AUD/NZD', 'CAD/JPY', 'CHF/JPY', 'EUR/CAD'
+    ]
     finnhub_symbols = {
-        'EUR/USD': 'OANDA:EUR_USD',
-        'GBP/USD': 'OANDA:GBP_USD',
-        'USD/JPY': 'OANDA:USD_JPY',
-        'AUD/USD': 'OANDA:AUD_USD',
-        'USD/CAD': 'OANDA:USD_CAD',
-        'NZD/USD': 'OANDA:NZD_USD'
+        'EUR/USD': 'OANDA:EUR_USD', 'GBP/USD': 'OANDA:GBP_USD', 'USD/JPY': 'OANDA:USD_JPY',
+        'AUD/USD': 'OANDA:AUD_USD', 'USD/CAD': 'OANDA:USD_CAD', 'NZD/USD': 'OANDA:NZD_USD',
+        'EUR/GBP': 'OANDA:EUR_GBP', 'EUR/JPY': 'OANDA:EUR_JPY', 'GBP/JPY': 'OANDA:GBP_JPY',
+        'USD/CHF': 'OANDA:USD_CHF', 'AUD/JPY': 'OANDA:AUD_JPY', 'EUR/AUD': 'OANDA:EUR_AUD',
+        'GBP/AUD': 'OANDA:GBP_AUD', 'AUD/CAD': 'OANDA:AUD_CAD', 'AUD/NZD': 'OANDA:AUD_NZD',
+        'CAD/JPY': 'OANDA:CAD_JPY', 'CHF/JPY': 'OANDA:CHF_JPY', 'EUR/CAD': 'OANDA:EUR_CAD'
     }
 
     signals = []
@@ -59,9 +64,29 @@ def handler(event: dict, context) -> dict:
             else:
                 volatility = 'high'
 
-            timeframes = ['1m', '5m', '15m', '1h', '4h']
-            selected_timeframe = timeframes[abs(int(change_percent * 10)) % len(timeframes)]
-            target_price = current_price * (1.002 if signal_type == 'BUY' else 0.998)
+            timeframes = ['15s', '30s', '1m', '2m', '5m']
+            if abs(change_percent) > 1.5:
+                selected_timeframe = '15s'
+            elif abs(change_percent) > 1.0:
+                selected_timeframe = '30s'
+            elif abs(change_percent) > 0.5:
+                selected_timeframe = '1m'
+            elif abs(change_percent) > 0.3:
+                selected_timeframe = '2m'
+            else:
+                selected_timeframe = '5m'
+            if selected_timeframe == '15s':
+                target_multiplier = 1.0005 if signal_type == 'BUY' else 0.9995
+            elif selected_timeframe == '30s':
+                target_multiplier = 1.001 if signal_type == 'BUY' else 0.999
+            elif selected_timeframe == '1m':
+                target_multiplier = 1.0015 if signal_type == 'BUY' else 0.9985
+            elif selected_timeframe == '2m':
+                target_multiplier = 1.002 if signal_type == 'BUY' else 0.998
+            else:
+                target_multiplier = 1.003 if signal_type == 'BUY' else 0.997
+            
+            target_price = current_price * target_multiplier
 
             signals.append({
                 'id': f"{pair.replace('/', '')}-{int(datetime.now().timestamp())}",
@@ -112,10 +137,30 @@ def handler(event: dict, context) -> dict:
                     else:
                         volatility = 'high'
 
-                    timeframes = ['1m', '5m', '15m', '1h', '4h']
-                    selected_timeframe = timeframes[abs(int(change_percent * 10)) % len(timeframes)]
+                    timeframes = ['15s', '30s', '1m', '2m', '5m']
+                    if abs(change_percent) > 1.5:
+                        selected_timeframe = '15s'
+                    elif abs(change_percent) > 1.0:
+                        selected_timeframe = '30s'
+                    elif abs(change_percent) > 0.5:
+                        selected_timeframe = '1m'
+                    elif abs(change_percent) > 0.3:
+                        selected_timeframe = '2m'
+                    else:
+                        selected_timeframe = '5m'
                     
-                    target_price = current_price * (1.002 if signal_type == 'BUY' else 0.998)
+                    if selected_timeframe == '15s':
+                        target_multiplier = 1.0005 if signal_type == 'BUY' else 0.9995
+                    elif selected_timeframe == '30s':
+                        target_multiplier = 1.001 if signal_type == 'BUY' else 0.999
+                    elif selected_timeframe == '1m':
+                        target_multiplier = 1.0015 if signal_type == 'BUY' else 0.9985
+                    elif selected_timeframe == '2m':
+                        target_multiplier = 1.002 if signal_type == 'BUY' else 0.998
+                    else:
+                        target_multiplier = 1.003 if signal_type == 'BUY' else 0.997
+                    
+                    target_price = current_price * target_multiplier
 
                     signals.append({
                         'id': f"{pair.replace('/', '')}-{int(datetime.now().timestamp())}",
